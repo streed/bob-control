@@ -301,6 +301,18 @@ export class UIController {
         this.log('{yellow-fg}Room closed{/yellow-fg}');
         break;
 
+      case 'room_renamed':
+        // Update room name in local state
+        const renamedRoom = this.rooms.get(message.roomId);
+        if (renamedRoom) {
+          renamedRoom.name = message.newName;
+          this.updateRoomList();
+          if (message.roomId === this.currentRoom) {
+            this.updateStatus();
+          }
+        }
+        break;
+
       case 'error':
         this.log(`{red-fg}Error: ${message.error}{/red-fg}`);
         break;
@@ -1218,6 +1230,18 @@ export class UIController {
   onRoomCreated(room) {
     this.rooms.set(room.id, room.toJSON());
     this.updateRoomList();
+
+    // Listen for room rename events (local mode)
+    room.on('renamed', ({ newName }) => {
+      const roomData = this.rooms.get(room.id);
+      if (roomData) {
+        roomData.name = newName;
+        this.updateRoomList();
+        if (room.id === this.currentRoom) {
+          this.updateStatus();
+        }
+      }
+    });
   }
 
   /**

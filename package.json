@@ -11,7 +11,9 @@
   "scripts": {
     "start": "node src/index.js",
     "server": "node src/server/standalone.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [
     "ai",
@@ -31,5 +33,8 @@
     "simple-git": "^3.27.0",
     "uuid": "^10.0.0",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0"
   }
 }
