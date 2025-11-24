@@ -42,7 +42,7 @@ export class BobServer extends EventEmitter {
       // Internal module paths
       /node_modules\/[^\s]+/g,
       // Environment variable hints
-      /\$[A-Z_]+/g,
+      /\$\{?[A-Z_][A-Z0-9_]*\}?/g,
     ];
 
     let sanitized = message;
