@@ -20,6 +20,7 @@ export class Room extends EventEmitter {
     this.currentRequest = null;
     this.requestTimeout = options.timeout || 600000; // 10 min default
     this.maxMessages = options.maxMessages || 1000; // Limit message history to prevent unbounded growth
+    this.customName = !!options.name; // Track if room has a user-assigned custom name
   }
 
   setAgent(agent) {
@@ -128,6 +129,9 @@ export class Room extends EventEmitter {
     if (this.status === 'busy') {
       throw new Error('Agent is busy processing. Use /cancel to abort.');
     }
+
+    // Auto-name room based on first user message
+    this.autoNameFromMessage(content);
 
     this.status = 'busy';
     this.broadcast({
@@ -253,6 +257,98 @@ export class Room extends EventEmitter {
         client.ws.send(payload);
       }
     }
+  }
+
+  /**
+   * Rename the room and broadcast the change
+   */
+  rename(newName) {
+    const oldName = this.name;
+    this.name = newName;
+
+    this.broadcast({
+      type: 'room_renamed',
+      roomId: this.id,
+      oldName,
+      newName,
+      timestamp: Date.now()
+    });
+
+    this.emit('renamed', { oldName, newName });
+  }
+
+  /**
+   * Infer a short, descriptive name from user message content
+   * Returns null if no good name can be inferred
+   */
+  static inferNameFromMessage(content) {
+    if (!content || typeof content !== 'string') return null;
+
+    // Clean the content
+    const cleaned = content.trim();
+    if (cleaned.length === 0) return null;
+
+    // Extract key action words and subjects
+    const patterns = [
+      // "fix the X", "fix X"
+      /\b(?:fix|debug|repair)\s+(?:the\s+)?(.+?)(?:\s+(?:bug|issue|error|problem))?$/i,
+      // "add X", "implement X", "create X"
+      /\b(?:add|implement|create|build|make|write)\s+(?:a\s+)?(.+)$/i,
+      // "update X", "change X", "modify X"
+      /\b(?:update|change|modify|edit|refactor)\s+(?:the\s+)?(.+)$/i,
+      // "test X", "check X"
+      /\b(?:test|check|verify|validate)\s+(?:the\s+)?(.+)$/i,
+      // "remove X", "delete X"
+      /\b(?:remove|delete|drop)\s+(?:the\s+)?(.+)$/i,
+      // "review X", "look at X"
+      /\b(?:review|look\s+at|examine|analyze)\s+(?:the\s+)?(.+)$/i,
+      // "help with X", "help me X"
+      /\bhelp\s+(?:me\s+)?(?:with\s+)?(.+)$/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = cleaned.match(pattern);
+      if (match && match[1]) {
+        let name = match[1].trim();
+        // Remove trailing punctuation
+        name = name.replace(/[.!?]+$/, '').trim();
+        // Truncate to reasonable length
+        if (name.length > 25) {
+          name = name.slice(0, 22) + '...';
+        }
+        if (name.length >= 3) {
+          return name;
+        }
+      }
+    }
+
+    // Fallback: use first few words
+    const words = cleaned.split(/\s+/).slice(0, 4);
+    let name = words.join(' ');
+    // Remove trailing punctuation
+    name = name.replace(/[.!?]+$/, '').trim();
+    if (name.length > 25) {
+      name = name.slice(0, 22) + '...';
+    }
+    return name.length >= 3 ? name : null;
+  }
+
+  /**
+   * Auto-name the room based on conversation content
+   * Updates on each message to reflect current work
+   */
+  autoNameFromMessage(content) {
+    // Skip if room has a user-assigned custom name (not auto-generated)
+    if (this.customName) {
+      return false;
+    }
+
+    const inferredName = Room.inferNameFromMessage(content);
+    if (inferredName && inferredName !== this.name) {
+      this.rename(inferredName);
+      return true;
+    }
+    return false;
   }
 
   toJSON() {
