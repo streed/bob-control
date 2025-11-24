@@ -258,4 +258,4 @@ Create `config.json` from the example:
 
 ## License
 
-MIT
+GNU GENERAL PUBLIC LICENSE Version 3
