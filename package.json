@@ -1,0 +1,35 @@
+{
+  "name": "bob-control",
+  "version": "1.0.0",
+  "description": "Multi-agent control system via WebSockets with irssi-style terminal UI",
+  "main": "src/index.js",
+  "type": "module",
+  "bin": {
+    "bob": "./src/index.js",
+    "bob-server": "./src/server/standalone.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "server": "node src/server/standalone.js",
+    "dev": "node --watch src/index.js"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "websocket",
+    "terminal",
+    "claude",
+    "codex",
+    "gemini"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "simple-git": "^3.27.0",
+    "uuid": "^10.0.0",
+    "ws": "^8.18.0"
+  }
+}
