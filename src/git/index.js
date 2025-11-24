@@ -1,5 +1,5 @@
 import simpleGit from 'simple-git';
-import { existsSync, mkdirSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, rmSync, statSync } from 'fs';
 import { join, basename } from 'path';
 import { tmpdir } from 'os';
 
@@ -203,6 +203,13 @@ export class GitManager {
    * @returns {Promise<{worktreePath: string, branch: string, isNew: boolean}>}
    */
   async createWorktree(repoDirectory, branchName, workspaceId) {
+    if (!existsSync(repoDirectory)) {
+      throw new Error(`Repository directory does not exist: ${repoDirectory}`);
+    }
+    const stats = statSync(repoDirectory);
+    if (!stats.isDirectory()) {
+      throw new Error(`Repository directory is not a directory: ${repoDirectory}`);
+    }
     if (!await this.isGitRepo(repoDirectory)) {
       throw new Error(`${repoDirectory} is not a git repository`);
     }
@@ -292,7 +299,7 @@ export class GitManager {
         const resolvedBase = require('fs').realpathSync(worktreeBase);
 
         // Ensure the worktree path is strictly within the base directory
-        if (!resolvedPath.startsWith(resolvedBase + path.sep)) {
+        if (!resolvedPath.startsWith(resolvedBase + sep)) {
           throw new Error(
             `Safety check failed: Refusing to delete path outside worktree directory. ` +
             `Path: ${worktreePath}, Expected base: ${worktreeBase}`
@@ -309,7 +316,7 @@ export class GitManager {
           const sysResolved = require('fs').realpathSync(sysPath, { throwIfNoEntry: false }) || sysPath;
           if (
             resolvedPath === sysResolved ||
-            resolvedPath.startsWith(sysResolved + path.sep)
+            resolvedPath.startsWith(sysResolved + sep)
           ) {
             throw new Error(
               `Safety check failed: Refusing to delete potentially dangerous system path: ${worktreePath}`
@@ -318,7 +325,7 @@ export class GitManager {
         }
 
         // 3. Path must contain the workspace ID as additional verification
-        if (!normalizedPath.includes(workspaceId)) {
+        if (!resolvedPath.includes(workspaceId)) {
           throw new Error(
             `Safety check failed: Path does not contain workspace ID. ` +
             `Path: ${worktreePath}, Workspace: ${workspaceId}`

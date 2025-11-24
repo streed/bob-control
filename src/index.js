@@ -3,6 +3,21 @@
 import { program } from 'commander';
 import { UIController } from './ui/index.js';
 import { BobServer } from './server/index.js';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
+
+// Load configuration from config.json
+let config = {};
+const configPath = join(process.cwd(), 'config.json');
+if (existsSync(configPath)) {
+  try {
+    const configFileContent = readFileSync(configPath, 'utf8');
+    config = JSON.parse(configFileContent);
+    console.log('Loaded config.json');
+  } catch (error) {
+    console.error(`Error loading config.json: ${error.message}`);
+  }
+}
 
 program
   .name('bob')
@@ -10,8 +25,8 @@ program
   .version('1.0.0');
 
 program
-  .option('-p, --port <port>', 'WebSocket server port', '8420')
-  .option('-H, --host <host>', 'WebSocket server host', '127.0.0.1')
+  .option('-p, --port <port>', 'WebSocket server port')
+  .option('-H, --host <host>', 'WebSocket server host')
   .option('-c, --connect <address>', 'Connect to remote server (host:port)')
   .option('-n, --name <name>', 'Set your display name')
   .option('-s, --server-only', 'Run server only (no UI)')
@@ -20,9 +35,11 @@ program
     if (options.serverOnly) {
       // Server-only mode
       const server = new BobServer({
-        port: parseInt(options.port, 10),
-        host: options.host,
-        useWorktrees: options.worktree !== false
+        port: options.port ? parseInt(options.port, 10) : (config.server?.port || 8420),
+        host: options.host || config.server?.host || '127.0.0.1',
+        useWorktrees: options.worktree !== false,
+        authToken: config.server?.authToken || null,
+        requireAuth: config.server?.requireAuth || false
       });
 
       server.on('log', (msg) => console.log(`[BOB] ${msg}`));
@@ -47,12 +64,14 @@ program
     } else {
       // UI mode
       const ui = new UIController({
-        port: parseInt(options.port, 10),
-        host: options.host,
+        port: options.port ? parseInt(options.port, 10) : (config.server?.port || 8420),
+        host: options.host || config.server?.host || '127.0.0.1',
         connect: options.connect,
-        name: options.name,
+        name: options.name || config.ui?.name,
         serverMode: !options.connect,
-        useWorktrees: options.worktree !== false
+        useWorktrees: options.noWorktree === undefined,
+        authToken: config.server?.authToken || null,
+        requireAuth: config.server?.requireAuth || false
       });
 
       try {
@@ -70,11 +89,14 @@ program
   .description('Start and create a room with the specified agent')
   .option('-d, --directory <path>', 'Working directory', process.cwd())
   .option('-b, --branch <name>', 'Create/checkout git branch')
-  .option('-p, --port <port>', 'WebSocket server port', '8420')
+  .option('-p, --port <port>', 'WebSocket server port')
   .action(async (agent, options) => {
     const ui = new UIController({
-      port: parseInt(options.port, 10),
-      serverMode: true
+      port: options.port ? parseInt(options.port, 10) : (config.server?.port || 8420),
+      host: config.server?.host || '127.0.0.1',
+      serverMode: true,
+      authToken: config.server?.authToken || null,
+      requireAuth: config.server?.requireAuth || false
     });
 
     await ui.start();
@@ -90,12 +112,14 @@ program
 program
   .command('server')
   .description('Run server only (no UI)')
-  .option('-p, --port <port>', 'WebSocket server port', '8420')
-  .option('-H, --host <host>', 'WebSocket server host', '127.0.0.1')
+  .option('-p, --port <port>', 'WebSocket server port')
+  .option('-H, --host <host>', 'WebSocket server host')
   .action(async (options) => {
     const server = new BobServer({
-      port: parseInt(options.port, 10),
-      host: options.host
+      port: options.port ? parseInt(options.port, 10) : (config.server?.port || 8420),
+      host: options.host || config.server?.host || '127.0.0.1',
+      authToken: config.server?.authToken || null,
+      requireAuth: config.server?.requireAuth || false
     });
 
     server.on('log', (msg) => console.log(`[BOB] ${msg}`));

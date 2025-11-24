@@ -86,6 +86,20 @@ export class BobServer extends EventEmitter {
   }
 
   handleConnection(ws, req) {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const token = url.searchParams.get('token');
+
+    if (this.requireAuth && token !== this.authToken) {
+      ws.send(JSON.stringify({
+        type: 'error',
+        error: 'Authentication failed',
+        timestamp: Date.now()
+      }));
+      ws.close(1008, 'Authentication Failed');
+      this.emit('log', `Auth failure from ${req.socket.remoteAddress}`);
+      return;
+    }
+
     const clientId = uuidv4();
     const clientInfo = {
       id: clientId,

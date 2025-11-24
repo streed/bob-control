@@ -222,13 +222,17 @@ agents['myagent'] = MyAgent;
 
 ## Configuration
 
+The application now loads `config.json` from the current working directory if it exists. Command-line arguments will always override values defined in `config.json`.
+
 Create `config.json` from the example:
 
 ```json
 {
   "server": {
     "port": 8420,
-    "host": "127.0.0.1"
+    "host": "127.0.0.1",
+    "authToken": "your-secret-token",  // New: Optional token for remote authentication
+    "requireAuth": false               // New: Set to true to require authToken for connections
   },
   "agents": {
     "claude": {
