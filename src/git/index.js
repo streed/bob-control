@@ -282,8 +282,38 @@ export class GitManager {
       }
       await git.raw(args);
     } catch (error) {
-      // If git worktree remove fails, try manual cleanup
+      // If git worktree remove fails, try manual cleanup with safety checks
       if (force && existsSync(worktreePath)) {
+        // Safety checks before force deletion:
+        // 1. Path must be under the designated worktree base directory
+        const worktreeBase = join(tmpdir(), 'bob-control-worktrees');
+        const normalizedPath = join(worktreePath); // Normalize path
+        const normalizedBase = join(worktreeBase);
+
+        if (!normalizedPath.startsWith(normalizedBase)) {
+          throw new Error(
+            `Safety check failed: Refusing to delete path outside worktree directory. ` +
+            `Path: ${worktreePath}, Expected base: ${worktreeBase}`
+          );
+        }
+
+        // 2. Path must not be a system directory or contain path traversal
+        const dangerousPaths = ['/', '/home', '/root', '/usr', '/var', '/etc', '/tmp'];
+        if (dangerousPaths.includes(normalizedPath) || normalizedPath.includes('..')) {
+          throw new Error(
+            `Safety check failed: Refusing to delete potentially dangerous path: ${worktreePath}`
+          );
+        }
+
+        // 3. Path must contain the workspace ID as additional verification
+        if (!normalizedPath.includes(workspaceId)) {
+          throw new Error(
+            `Safety check failed: Path does not contain workspace ID. ` +
+            `Path: ${worktreePath}, Workspace: ${workspaceId}`
+          );
+        }
+
+        // All safety checks passed, proceed with deletion
         rmSync(worktreePath, { recursive: true, force: true });
         // Prune the worktree reference
         await git.raw(['worktree', 'prune']);

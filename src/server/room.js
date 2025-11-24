@@ -18,7 +18,8 @@ export class Room extends EventEmitter {
 
     // Request tracking for cancellation
     this.currentRequest = null;
-    this.requestTimeout = options.timeout || 300000; // 5 min default
+    this.requestTimeout = options.timeout || 600000; // 10 min default
+    this.maxMessages = options.maxMessages || 1000; // Limit message history to prevent unbounded growth
   }
 
   setAgent(agent) {
@@ -103,6 +104,11 @@ export class Room extends EventEmitter {
       ...metadata
     };
     this.messages.push(message);
+
+    // Trim message history if it exceeds the limit
+    while (this.messages.length > this.maxMessages) {
+      this.messages.shift();
+    }
 
     this.broadcast({
       type: 'message',

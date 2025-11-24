@@ -14,10 +14,48 @@ export class BobServer extends EventEmitter {
     });
     this.clients = new Map(); // All connected clients
 
+    // Authentication configuration
+    this.authToken = options.authToken || null; // Optional token-based auth
+    this.requireAuth = options.requireAuth || false;
+
     // Forward room manager events
     this.roomManager.on('roomCreated', (room) => this.emit('roomCreated', room));
     this.roomManager.on('roomDestroyed', (roomId) => this.emit('roomDestroyed', roomId));
     this.roomManager.on('log', (msg) => this.emit('log', msg));
+  }
+
+  /**
+   * Sanitize error message for client consumption
+   * Removes sensitive information like file paths, stack traces, etc.
+   */
+  sanitizeError(error) {
+    const message = error?.message || String(error);
+
+    // List of patterns to sanitize
+    const sensitivePatterns = [
+      // File paths
+      /\/home\/[^\s]+/g,
+      /\/Users\/[^\s]+/g,
+      /C:\\Users\\[^\s]+/gi,
+      // Stack traces
+      /\s+at\s+.+\(.+:\d+:\d+\)/g,
+      // Internal module paths
+      /node_modules\/[^\s]+/g,
+      // Environment variable hints
+      /\$[A-Z_]+/g,
+    ];
+
+    let sanitized = message;
+    for (const pattern of sensitivePatterns) {
+      sanitized = sanitized.replace(pattern, '[redacted]');
+    }
+
+    // Truncate very long messages
+    if (sanitized.length > 500) {
+      sanitized = sanitized.slice(0, 500) + '...';
+    }
+
+    return sanitized;
   }
 
   start() {
