@@ -287,22 +287,34 @@ export class GitManager {
         // Safety checks before force deletion:
         // 1. Path must be under the designated worktree base directory
         const worktreeBase = join(tmpdir(), 'bob-control-worktrees');
-        const normalizedPath = join(worktreePath); // Normalize path
-        const normalizedBase = join(worktreeBase);
+        // Canonicalize paths to handle symlinks and resolve traversal
+        const resolvedPath = require('fs').realpathSync(worktreePath);
+        const resolvedBase = require('fs').realpathSync(worktreeBase);
 
-        if (!normalizedPath.startsWith(normalizedBase)) {
+        // Ensure the worktree path is strictly within the base directory
+        if (!resolvedPath.startsWith(resolvedBase + path.sep)) {
           throw new Error(
             `Safety check failed: Refusing to delete path outside worktree directory. ` +
             `Path: ${worktreePath}, Expected base: ${worktreeBase}`
           );
         }
 
-        // 2. Path must not be a system directory or contain path traversal
-        const dangerousPaths = ['/', '/home', '/root', '/usr', '/var', '/etc', '/tmp'];
-        if (dangerousPaths.includes(normalizedPath) || normalizedPath.includes('..')) {
-          throw new Error(
-            `Safety check failed: Refusing to delete potentially dangerous path: ${worktreePath}`
-          );
+        // Comprehensive list of dangerous system directories (cross-platform)
+        const dangerousPaths = [
+          '/', '/home', '/root', '/usr', '/var', '/etc', '/tmp',
+          'C:\\', 'C:\\Windows', 'C:\\Program Files', 'C:\\Program Files (x86)', 'C:\\Users', 'C:\\Documents and Settings'
+        ];
+        // Check if resolvedPath matches or is within any dangerous system directory
+        for (const sysPath of dangerousPaths) {
+          const sysResolved = require('fs').realpathSync(sysPath, { throwIfNoEntry: false }) || sysPath;
+          if (
+            resolvedPath === sysResolved ||
+            resolvedPath.startsWith(sysResolved + path.sep)
+          ) {
+            throw new Error(
+              `Safety check failed: Refusing to delete potentially dangerous system path: ${worktreePath}`
+            );
+          }
         }
 
         // 3. Path must contain the workspace ID as additional verification
