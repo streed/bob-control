@@ -12,8 +12,11 @@
       "command": "codex"
     },
     "gemini": {
-      "model": "gemini-pro",
-      "command": "gemini"
+      "model": "gemini-2.5-pro",
+      "interactive": true,
+      "autoAccept": true,
+      "sandbox": true,
+      "checkpointing": true
     }
   },
   "ui": {
