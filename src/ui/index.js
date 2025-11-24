@@ -27,7 +27,25 @@ export class UIController {
     this.serverMode = options.serverMode || false;
     this.useWorktrees = options.useWorktrees !== false;
     this.maxBufferLines = 500; // Max lines to keep per room
-    this.hasPartialLine = false; // Track if last line is incomplete (for streaming)
+    this.roomPartialLines = new Map(); // Track partial line state per room (for streaming)
+  }
+
+  /**
+   * Get partial line state for a room
+   */
+  hasPartialLine(roomId) {
+    return this.roomPartialLines.get(roomId) || false;
+  }
+
+  /**
+   * Set partial line state for a room
+   */
+  setPartialLine(roomId, hasPartial) {
+    if (hasPartial) {
+      this.roomPartialLines.set(roomId, true);
+    } else {
+      this.roomPartialLines.delete(roomId);
+    }
   }
 
   /**
@@ -186,9 +204,9 @@ export class UIController {
             this.appendToBuffer(message.roomId, line);
             if (message.roomId === this.currentRoom) {
               // If we had a partial line, replace it with the complete version
-              if (this.hasPartialLine) {
+              if (this.hasPartialLine(message.roomId)) {
                 this.replaceLastLine(line);
-                this.hasPartialLine = false;
+                this.setPartialLine(message.roomId, false);
               } else {
                 this.ui.chatBox.pushLine(line);
               }
@@ -196,11 +214,11 @@ export class UIController {
           } else {
             // Partial line - update display but don't buffer yet
             if (message.roomId === this.currentRoom) {
-              if (this.hasPartialLine) {
+              if (this.hasPartialLine(message.roomId)) {
                 this.replaceLastLine(line);
               } else {
                 this.ui.chatBox.pushLine(line);
-                this.hasPartialLine = true;
+                this.setPartialLine(message.roomId, true);
               }
             }
           }
@@ -220,10 +238,10 @@ export class UIController {
           // Reset markdown renderer when starting a new response
           if (message.status === 'busy') {
             this.getMarkdownRenderer(message.roomId).reset();
-            this.hasPartialLine = false;
+            this.setPartialLine(message.roomId, false);
           } else if (message.status === 'ready') {
             // Response complete - clear partial line state
-            this.hasPartialLine = false;
+            this.setPartialLine(message.roomId, false);
           }
 
           // Update room list to reflect status indicator changes for all rooms
@@ -267,6 +285,20 @@ export class UIController {
           this.rooms.set(room.id, room);
         }
         this.updateRoomList();
+        break;
+
+      case 'room_closed':
+        // Clean up resources for the closed room (WebSocket client mode)
+        this.rooms.delete(message.roomId);
+        this.roomBuffers.delete(message.roomId);
+        this.roomRenderers.delete(message.roomId);
+        this.roomPartialLines.delete(message.roomId);
+        if (this.currentRoom === message.roomId) {
+          this.currentRoom = null;
+          this.updateStatus();
+        }
+        this.updateRoomList();
+        this.log('{yellow-fg}Room closed{/yellow-fg}');
         break;
 
       case 'error':
@@ -493,9 +525,9 @@ export class UIController {
                 // Complete line - add to buffer and display
                 this.appendToBuffer(room.id, line);
                 if (this.currentRoom === room.id) {
-                  if (this.hasPartialLine) {
+                  if (this.hasPartialLine(room.id)) {
                     this.replaceLastLine(line);
-                    this.hasPartialLine = false;
+                    this.setPartialLine(room.id, false);
                   } else {
                     this.ui.chatBox.pushLine(line);
                   }
@@ -503,11 +535,11 @@ export class UIController {
               } else {
                 // Partial line - update display but don't buffer yet
                 if (this.currentRoom === room.id) {
-                  if (this.hasPartialLine) {
+                  if (this.hasPartialLine(room.id)) {
                     this.replaceLastLine(line);
                   } else {
                     this.ui.chatBox.pushLine(line);
-                    this.hasPartialLine = true;
+                    this.setPartialLine(room.id, true);
                   }
                 }
               }
@@ -530,9 +562,9 @@ export class UIController {
             // Reset markdown renderer when starting a new response
             if (status === 'busy') {
               this.getMarkdownRenderer(room.id).reset();
-              this.hasPartialLine = false;
+              this.setPartialLine(room.id, false);
             } else if (status === 'ready') {
-              this.hasPartialLine = false;
+              this.setPartialLine(room.id, false);
             }
 
             // Update room list to reflect status indicator changes for all rooms
@@ -1195,6 +1227,7 @@ export class UIController {
     this.rooms.delete(roomId);
     this.roomBuffers.delete(roomId); // Clean up buffer
     this.roomRenderers.delete(roomId); // Clean up markdown renderer
+    this.roomPartialLines.delete(roomId); // Clean up partial line state
     if (this.currentRoom === roomId) {
       this.currentRoom = null;
       this.updateStatus();
