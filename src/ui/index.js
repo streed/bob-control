@@ -27,23 +27,46 @@ export class UIController {
     this.serverMode = options.serverMode || false;
     this.useWorktrees = options.useWorktrees !== false;
     this.maxBufferLines = 500; // Max lines to keep per room
-    this.roomPartialLines = new Map(); // Track partial line state per room (for streaming)
+    this.roomPartialLines = new Map(); // Track partial line content per room (for streaming)
   }
 
   /**
-   * Get partial line state for a room
+   * Check if a room has a partial line
    */
   hasPartialLine(roomId) {
-    return this.roomPartialLines.get(roomId) || false;
+    return this.roomPartialLines.has(roomId);
   }
 
   /**
-   * Set partial line state for a room
+   * Get the partial line content for a room
    */
-  setPartialLine(roomId, hasPartial) {
-    if (hasPartial) {
-      this.roomPartialLines.set(roomId, true);
+  getPartialLine(roomId) {
+    return this.roomPartialLines.get(roomId) || null;
+  }
+
+  /**
+   * Set partial line content for a room
+   */
+  setPartialLine(roomId, content) {
+    if (content === false || content === null) {
+      this.roomPartialLines.delete(roomId);
+    } else if (content === true) {
+      // Legacy compatibility - shouldn't happen, but handle it
+      if (!this.roomPartialLines.has(roomId)) {
+        this.roomPartialLines.set(roomId, '');
+      }
     } else {
+      this.roomPartialLines.set(roomId, content);
+    }
+  }
+
+  /**
+   * Finalize any partial line in a room's buffer (flush it as a complete line)
+   */
+  finalizePartialLine(roomId) {
+    const partial = this.getPartialLine(roomId);
+    if (partial) {
+      this.appendToBuffer(roomId, partial);
       this.roomPartialLines.delete(roomId);
     }
   }
@@ -199,26 +222,27 @@ export class UIController {
         const results = renderer.processChunk(message.chunk);
 
         for (const { line, complete } of results) {
+          const hadPartial = this.hasPartialLine(message.roomId);
+
           if (complete) {
             // Complete line - add to buffer and display
             this.appendToBuffer(message.roomId, line);
+            this.setPartialLine(message.roomId, false);
             if (message.roomId === this.currentRoom) {
-              // If we had a partial line, replace it with the complete version
-              if (this.hasPartialLine(message.roomId)) {
+              if (hadPartial) {
                 this.replaceLastLine(line);
-                this.setPartialLine(message.roomId, false);
               } else {
                 this.ui.chatBox.pushLine(line);
               }
             }
           } else {
-            // Partial line - update display but don't buffer yet
+            // Partial line - store content for later and update display
+            this.setPartialLine(message.roomId, line);
             if (message.roomId === this.currentRoom) {
-              if (this.hasPartialLine(message.roomId)) {
+              if (hadPartial) {
                 this.replaceLastLine(line);
               } else {
                 this.ui.chatBox.pushLine(line);
-                this.setPartialLine(message.roomId, true);
               }
             }
           }
@@ -240,8 +264,8 @@ export class UIController {
             this.getMarkdownRenderer(message.roomId).reset();
             this.setPartialLine(message.roomId, false);
           } else if (message.status === 'ready') {
-            // Response complete - clear partial line state
-            this.setPartialLine(message.roomId, false);
+            // Response complete - finalize any partial line into the buffer
+            this.finalizePartialLine(message.roomId);
           }
 
           // Update room list to reflect status indicator changes for all rooms
@@ -533,25 +557,27 @@ export class UIController {
             const results = renderer.processChunk(chunk);
 
             for (const { line, complete } of results) {
+              const hadPartial = this.hasPartialLine(room.id);
+
               if (complete) {
                 // Complete line - add to buffer and display
                 this.appendToBuffer(room.id, line);
+                this.setPartialLine(room.id, false);
                 if (this.currentRoom === room.id) {
-                  if (this.hasPartialLine(room.id)) {
+                  if (hadPartial) {
                     this.replaceLastLine(line);
-                    this.setPartialLine(room.id, false);
                   } else {
                     this.ui.chatBox.pushLine(line);
                   }
                 }
               } else {
-                // Partial line - update display but don't buffer yet
+                // Partial line - store content for later and update display
+                this.setPartialLine(room.id, line);
                 if (this.currentRoom === room.id) {
-                  if (this.hasPartialLine(room.id)) {
+                  if (hadPartial) {
                     this.replaceLastLine(line);
                   } else {
                     this.ui.chatBox.pushLine(line);
-                    this.setPartialLine(room.id, true);
                   }
                 }
               }
@@ -576,7 +602,8 @@ export class UIController {
               this.getMarkdownRenderer(room.id).reset();
               this.setPartialLine(room.id, false);
             } else if (status === 'ready') {
-              this.setPartialLine(room.id, false);
+              // Response complete - finalize any partial line into the buffer
+              this.finalizePartialLine(room.id);
             }
 
             // Update room list to reflect status indicator changes for all rooms
@@ -910,6 +937,7 @@ export class UIController {
     }
 
     if (targetRoom) {
+      const previousRoom = this.currentRoom;
       this.currentRoom = targetRoom;
       this.updateRoomList();
       this.updateStatus();
@@ -920,8 +948,15 @@ export class UIController {
       this.ui.chatBox.setContent('');
       this.displayRoomBuffer(targetRoom);
 
-      // If no buffer exists, show a welcome message
-      if (!this.roomBuffers.has(targetRoom) || this.roomBuffers.get(targetRoom).length === 0) {
+      // Also display any current partial line that's being streamed
+      const partialLine = this.getPartialLine(targetRoom);
+      if (partialLine) {
+        this.ui.chatBox.pushLine(partialLine);
+      }
+
+      // If no buffer exists and no partial line, show a welcome message
+      const hasBuffer = this.roomBuffers.has(targetRoom) && this.roomBuffers.get(targetRoom).length > 0;
+      if (!hasBuffer && !partialLine) {
         this.log(`{cyan-fg}Switched to: ${room.name || targetRoom.slice(0, 8)}{/cyan-fg}`);
       }
 
